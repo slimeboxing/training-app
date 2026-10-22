@@ -87,6 +87,7 @@ function showStandalonePrint(html,kind){
  })}
  async function savePdfInApp(){
   const btn=document.getElementById('savePdf')||document.getElementById('reportPdfButton');
+  if(!btn){alert('PDFボタンが見つかりません');return}
   const original=btn.textContent;btn.disabled=true;btn.textContent='PDF作成中…';
   try{
    await loadPdfEngine();
@@ -94,26 +95,29 @@ function showStandalonePrint(html,kind){
    if(!source)throw new Error('印刷内容が見つかりません');
    let blob;
    if(source.classList.contains('sheet')){
-     // Reuse the working monthly PDF conversion path for the weekly sheet.
-     const oldTransform=source.style.transform;
-     const oldOrigin=source.style.transformOrigin;
-     const frame=source.closest('.sheet-frame');
-     const oldWidth=frame?frame.style.width:'';
-     const oldHeight=frame?frame.style.height:'';
+     btn.textContent='週間PDFを画像化中…';
+     const sheet=source;
+     const oldTransform=sheet.style.transform;
+     const oldOrigin=sheet.style.transformOrigin;
+     const oldWidth=sheet.style.width;
      try{
-       source.style.transform='none';
-       source.style.transformOrigin='top left';
-       if(frame){frame.style.width='190mm';frame.style.height='259mm'}
-       const opts={margin:[10,10,10,10],filename:pdfFileName,
-         image:{type:'jpeg',quality:.95},
-         html2canvas:{scale:1.5,useCORS:true,scrollY:0},
-         jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-         pagebreak:{mode:[]}};
-       blob=await html2pdf().set(opts).from(source).outputPdf('blob');
+       sheet.style.transform='none';
+       sheet.style.transformOrigin='top left';
+       sheet.style.width='190mm';
+       await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+       const canvas=await html2canvas(sheet,{
+         scale:1.5,backgroundColor:'#ffffff',useCORS:true,
+         scrollX:0,scrollY:0,windowWidth:Math.max(900,sheet.scrollWidth),
+         logging:false
+       });
+       btn.textContent='週間PDFを保存中…';
+       const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+       pdf.addImage(canvas.toDataURL('image/jpeg',0.9),'JPEG',10,10,190,259);
+       blob=pdf.output('blob');
      }finally{
-       source.style.transform=oldTransform;
-       source.style.transformOrigin=oldOrigin;
-       if(frame){frame.style.width=oldWidth;frame.style.height=oldHeight}
+       sheet.style.transform=oldTransform;
+       sheet.style.transformOrigin=oldOrigin;
+       sheet.style.width=oldWidth;
      }
    }else{
      const opts={margin:12,filename:pdfFileName,image:{type:'jpeg',quality:.95},html2canvas:{scale:2,useCORS:true,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy']}};
@@ -129,6 +133,7 @@ function showStandalonePrint(html,kind){
   finally{btn.disabled=false;btn.textContent=original}
  }
  window.addEventListener('DOMContentLoaded',()=>{
+  loadPdfEngine().catch(e=>console.warn(e));
   const back=document.querySelector('.back-btn,.back-link');if(back){back.href='#';back.onclick=e=>{e.preventDefault();returnToTraining()}}
   const print=document.getElementById('savePdf')||document.getElementById('reportPdfButton');
   if(print){print.onclick=savePdfInApp;print.textContent='📄 PDF作成・共有';}
