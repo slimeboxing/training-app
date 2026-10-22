@@ -71,6 +71,56 @@ $('pauseTimer').onclick=stopTimer;
 $('resetTimer').onclick=()=>{stopTimer();phase='round';currentRound=1;remaining=Math.max(1,+$('roundSeconds').value||120);showClock()};
 $('roundSeconds').onchange=()=>{if(!running)$('resetTimer').click()};$('roundCount').onchange=()=>{if(!running)$('resetTimer').click()};
 $('testSound').onclick=()=>{unlockAudio();gong();setTimeout(clappers,2200)};
+
+function standaloneMode(){return window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true}
+function showStandalonePrint(html,kind){
+ // Keep the same WebKit window. iOS installed web apps often block printing in popup windows.
+ const pdfName=kind==='weekly'?'週間トレーニング.pdf':'月間トレーニングレポート.pdf';
+ const script=`<script>
+ const pdfFileName=${JSON.stringify(pdfName)};
+ function returnToTraining(){location.reload()}
+ function loadPdfEngine(){return new Promise((resolve,reject)=>{
+   if(window.html2pdf){resolve();return}
+   const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+   s.onload=resolve;s.onerror=()=>reject(new Error('PDF変換ライブラリを読み込めませんでした。ネット接続を確認してください。'));
+   document.head.appendChild(s);
+ })}
+ async function savePdfInApp(){
+  const btn=document.getElementById('savePdf')||document.getElementById('reportPdfButton');
+  const original=btn.textContent;btn.disabled=true;btn.textContent='PDF作成中…';
+  try{
+   await loadPdfEngine();
+   const source=document.querySelector('.sheet')||document.getElementById('reportContent');
+   if(!source)throw new Error('印刷内容が見つかりません');
+   const oldTransform=source.style.transform;if(source.classList.contains('sheet'))source.style.transform='none';
+   const opts={margin:0,filename:pdfFileName,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true,scrollY:0,windowWidth:Math.max(800,source.scrollWidth)},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy']}};
+   if(document.querySelector('.sheet')){opts.margin=10;opts.html2canvas.scale=2;}
+   else {opts.margin=12;}
+   let blob;try{blob=await html2pdf().set(opts).from(source).outputPdf('blob')}finally{source.style.transform=oldTransform;}
+   const file=new File([blob],pdfFileName,{type:'application/pdf'});
+   if(navigator.canShare&&navigator.canShare({files:[file]})&&navigator.share){
+     await navigator.share({files:[file],title:pdfFileName});
+   }else{
+     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=pdfFileName;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+   }
+  }catch(e){if(e.name!=='AbortError')alert('PDF作成ができませんでした：'+e.message)}
+  finally{btn.disabled=false;btn.textContent=original}
+ }
+ window.addEventListener('DOMContentLoaded',()=>{
+  const back=document.querySelector('.back-btn,.back-link');if(back){back.href='#';back.onclick=e=>{e.preventDefault();returnToTraining()}}
+  const print=document.getElementById('savePdf')||document.getElementById('reportPdfButton');
+  if(print){print.onclick=savePdfInApp;print.textContent='📄 PDF作成・共有';}
+ });
+<\/script>`;
+ if(kind==='monthly'){
+   html=html.replace('<h1>🥊 TRAINING LOG', '<div id="reportContent"><h1>🥊 TRAINING LOG');
+   html=html.replace('</body></html>','</div></body></html>');
+   html=html.replace('<button onclick="window.print()">','<button id="reportPdfButton" type="button">');
+ }
+ html=html.replace('</body></html>',script+'</body></html>');
+ document.open();document.write(html);document.close();
+}
+
 function weeklyPrint(){
  const wk=db.weeks[dateStr(weekStart)]||{};const startDay=weekStart,endDay=addDays(weekStart,6);
  const jpDate=d=>`${d.getMonth()+1}/${d.getDate()}`;
@@ -148,6 +198,7 @@ window.addEventListener('load',fitPrintPreview);
 window.addEventListener('resize',fitPrintPreview);
 setTimeout(fitPrintPreview,150);
 \/script></body></html>`;
+ if(standaloneMode()){showStandalonePrint(html,'weekly');return}
  const w=window.open('','_blank');if(!w){alert('ポップアップがブロックされたで');return}w.document.open();w.document.write(html);w.document.close();
 }
 $('printWeekly').onclick=weeklyPrint;
@@ -179,6 +230,7 @@ $('printMonthly').onclick=()=>{
    const delta=weights.at(-1).w-weights[0].w;weightSummary=`${weights[0].w.toFixed(1)} → ${weights.at(-1).w.toFixed(1)} kg（${delta>0?'+':''}${delta.toFixed(1)} kg）`;
   }
  const html=`<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${month} 月間トレーニングレポート</title><style>@page{size:A4 portrait;margin:15mm}body{font-family:-apple-system,'Helvetica Neue',sans-serif;color:#17243c;margin:0}h1{font-size:23px;border-bottom:3px solid #1764ca;padding-bottom:12px}h2{font-size:16px;margin-top:24px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.metric{background:#eef4ff;border-radius:8px;padding:14px;font-size:12px}.metric b{display:block;font-size:22px;margin-top:8px}table{width:100%;border-collapse:collapse;font-size:11px}h2,svg,.metric,.journal-entry{break-inside:avoid}.journal{break-before:page}.journal-entry{padding:8px 0;border-bottom:1px solid #dbe2ee}.journal-entry p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.6;margin:5px 0}td,th{padding:8px;border-bottom:1px solid #dbe2ee;text-align:left;overflow-wrap:anywhere}th{background:#eef4ff}p{font-size:11px;color:#53647b}.report-nav{display:flex;gap:10px;align-items:center;margin:10px 0 20px;flex-wrap:wrap}.report-nav a,.report-nav button{padding:12px 16px;border:0;border-radius:8px;font-size:15px;font-weight:700;text-decoration:none}.report-nav a{background:#e7edf7;color:#123456}.report-nav button{background:#1764ca;color:white}.no-print{margin:0}@media print{.no-print{display:none}} </style></head><body><nav class="report-nav no-print"><a href="${returnUrl}" class="back-link">← アプリに戻る</a><button onclick="window.print()">🖨️ 印刷 / PDF保存</button></nav><h1>🥊 TRAINING LOG｜${safe(month.slice(0,4))}年${Number(month.slice(5))}月 月間トレーニングレポート</h1><p>対象：${safe(month)}　｜　作成日：${dateStr(new Date())}</p><div class="grid"><div class="metric">トレーニング記録日数<b>${days.size} 日</b></div><div class="metric">RUN総距離<b>${km.toFixed(2)} km</b></div><div class="metric">総運動消費<b>${Math.round(kcal)} kcal</b></div><div class="metric">シャドー完了<b>${shadow} R</b></div><div class="metric">サンドバッグ完了<b>${bag} R</b></div><div class="metric">筋トレ完了セット<b>${strength} セット</b></div><div class="metric">パーソナル完了項目<b>${personal}</b></div><div class="metric">RUN完了チェック<b>${count('run')} 回</b></div><div class="metric">OFF設定<b>${off} 日</b></div></div><h2>体重の推移</h2><p>${weightSummary}｜記録 ${weights.length} 回</p>${weightGraph}<h2>日別の運動記録</h2><table><thead><tr><th>日付</th><th>RUN (km)</th><th>消費 (kcal)</th><th>メモ</th></tr></thead><tbody>${rows||'<tr><td colspan="4">記録なし</td></tr>'}</tbody></table><section class="journal"><h2>📝 練習日誌</h2>${entries.filter(([,x])=>String(x.memo||'').trim()).map(([d,x])=>`<div class="journal-entry"><b>${safe(d)}</b><p>${safe(x.memo).replace(/\n/g,'<br>')}</p></div>`).join('')||'<p>メモの記録なし</p>'}</section><p>集計元：この端末に保存された記録・完了チェック。消費カロリー＝RUN距離×体重×1.036＋その他運動消費。未入力分は含まれません。</p></body></html>`;
+ if(standaloneMode()){showStandalonePrint(html,'monthly');return}
  const w=window.open('','_blank');if(!w){alert('ポップアップがブロックされたで。ブラウザの設定を確認してな！');return}w.document.open();w.document.write(html);w.document.close();
 };
 renderToday();showClock();
