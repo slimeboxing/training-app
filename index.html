@@ -148,6 +148,47 @@ function showStandalonePrint(html,kind){
  }
  html=html.replace('</body></html>',script+'</body></html>');
  document.open();document.write(html);document.close();
+ // In iOS standalone, scripts inserted via document.write may not execute.
+ // Install the controls from the already-running app context as a fallback.
+ const installedPdfHandler=async function(){
+   const btn=document.getElementById('savePdf')||document.getElementById('reportPdfButton');
+   if(!btn)return;
+   const label=btn.textContent;
+   btn.disabled=true;btn.textContent='PDF作成中…';
+   try{
+     if(!window.html2pdf){
+       await new Promise((resolve,reject)=>{
+         const js=document.createElement('script');
+         js.src='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+         js.onload=resolve;js.onerror=()=>reject(new Error('PDFライブラリを読み込めませんでした'));
+         document.head.appendChild(js);
+       });
+     }
+     const source=document.querySelector('.sheet')||document.getElementById('reportContent');
+     if(!source)throw new Error('印刷対象が見つかりません');
+     const fileName=kind==='weekly'?'週間トレーニング.pdf':'月間トレーニングレポート.pdf';
+     const blob=await html2pdf().set({margin:10,filename:fileName,
+       image:{type:'jpeg',quality:0.94},
+       html2canvas:{scale:1.5,useCORS:true,scrollY:0},
+       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+       pagebreak:{mode:[]}}).from(source).outputPdf('blob');
+     const file=new File([blob],fileName,{type:'application/pdf'});
+     if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+       await navigator.share({files:[file],title:fileName});
+     }else{
+       const url=URL.createObjectURL(blob);
+       const a=document.createElement('a');a.href=url;a.download=fileName;document.body.appendChild(a);a.click();a.remove();
+       setTimeout(()=>URL.revokeObjectURL(url),30000);
+     }
+   }catch(e){if(e.name!=='AbortError')alert('PDF作成エラー：'+e.message)}
+   finally{btn.disabled=false;btn.textContent=label}
+ };
+ window.savePdfInApp=installedPdfHandler;
+ window.returnToTraining=()=>location.reload();
+ const pdfBtn=document.getElementById('savePdf')||document.getElementById('reportPdfButton');
+ if(pdfBtn){pdfBtn.onclick=installedPdfHandler;pdfBtn.textContent='📄 PDF作成・共有'}
+ const backBtn=document.querySelector('.back-btn,.back-link');
+ if(backBtn)backBtn.onclick=(e)=>{e.preventDefault();location.reload()};
 }
 
 function weeklyPrint(){
