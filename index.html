@@ -3,7 +3,7 @@
 </style></head><body><header>🥊 TRAINING LOG</header><nav><button data-tab="today" class="active">🏠 今日</button><button data-tab="week">📅 週間</button><button data-tab="timer">⏱️ タイマー</button><button data-tab="log">📝 記録</button><button data-tab="stats">📊 集計</button></nav><main>
 <section id="today"><div class="panel"><h2 id="dateTitle"></h2><div class="days" id="days"></div><div class="buttons"><button class="soft" id="sunBtn">☀️ 晴れ</button><button class="soft" id="rainBtn">🌧️ 雨</button><button class="soft" id="offBtn">🛌 OFF</button></div><div id="todayTasks"></div><div class="progress"><div id="bar"></div></div><p class="muted" id="count"></p></div></section>
 <section id="week" class="hidden"><div class="panel"><h2>📋 GPTの週間メニューを読込</h2><p class="muted">月〜日の予定を1行ずつ入力。「通常」「雨天」「実績」も書けるで！ 筋トレA〜Dは内蔵済み。</p><textarea id="menuText" placeholder="月曜：筋トレA、グローブシャドー6R、RUN5km&#10;火曜：パーソナル&#10;水曜：筋トレB、サンドバッグ6R"></textarea><div class="buttons"><button class="primary" id="importBtn">この週に読み込む</button><button class="soft" id="sampleBtn">入力例</button></div><p class="note">読込すると選択中の週の予定が更新される。過去の練習記録は残る。</p></div><div class="panel"><h2>📅 週間メニュー</h2><div class="buttons"><button class="soft" id="prevWeek">← 前週</button><button class="soft" id="nextWeek">次週 →</button></div><span class="pill" id="weekRange"></span><div id="weekRows"></div></div></section>
-<section id="timer" class="hidden"><div class="panel"><h2>⏱️ ラウンドタイマー</h2><p class="muted">開始・終了はゴング、終了10秒前は拍子木。最初に音テストをタップして音量を確認してな！</p><label>ラウンド（秒）</label><input id="roundSeconds" type="number" min="1" value="120"><label>ラウンド数</label><input id="roundCount" type="number" min="1" max="99" value="6"><p class="muted" id="roundProgress">1 / 6 R</p><label>休憩（秒）</label><input id="restSeconds" type="number" min="0" value="30"><div class="timer" id="clock">02:00</div><p class="muted" id="timerPhase">ラウンド</p><div class="buttons"><button class="primary" id="startTimer">スタート</button><button class="soft" id="pauseTimer">一時停止</button><button class="soft" id="resetTimer">リセット</button><button class="soft" id="testSound">🔔 音テスト</button></div></div></section>
+<section id="timer" class="hidden"><div class="panel"><h2>⏱️ ラウンドタイマー</h2><p class="muted">開始・終了は実録のボクシングゴング、終了10秒前は拍子木。実録音声の初回読込には通信が必要。最初に音テストをタップしてな！</p><label>ラウンド（秒）</label><input id="roundSeconds" type="number" min="1" value="120"><label>ラウンド数</label><input id="roundCount" type="number" min="1" max="99" value="6"><p class="muted" id="roundProgress">1 / 6 R</p><label>休憩（秒）</label><input id="restSeconds" type="number" min="0" value="30"><div class="timer" id="clock">02:00</div><p class="muted" id="timerPhase">ラウンド</p><div class="buttons"><button class="primary" id="startTimer">スタート</button><button class="soft" id="pauseTimer">一時停止</button><button class="soft" id="resetTimer">リセット</button><button class="soft" id="testSound">🔔 音テスト</button></div></div></section>
 <section id="log" class="hidden"><div class="panel"><h2>📝 トレーニング記録</h2><p class="muted" id="logDate"></p><div class="grid"><div><label>RUN距離 km</label><input id="runKm" type="number" step="0.01"></div><div><label>体重 kg</label><input id="weight" type="number" step="0.1"></div><div><label>RUN消費 kcal</label><div class="metric" id="runKcal">0</div></div><div><label>その他運動 kcal</label><input id="otherKcal" type="number" step="1"></div></div><label>メモ</label><textarea id="memo" placeholder="今日の練習メモ"></textarea><div class="buttons"><button class="primary" id="saveLog">記録を保存</button></div><p class="note">RUN消費 = 体重 × 距離 × 1.036。その他運動はWatch累計の差分などを入力。</p></div></section>
 <section id="stats" class="hidden"><div class="panel"><h2>📊 集計</h2><div class="grid"><div><div class="muted">記録日数</div><div class="metric" id="statDays">0</div></div><div><div class="muted">RUN総距離</div><div class="metric" id="statKm">0 km</div></div><div><div class="muted">運動消費合計</div><div class="metric" id="statKcal">0 kcal</div></div><div><div class="muted">完了チェック数</div><div class="metric" id="statChecks">0</div></div></div></div><div class="panel"><h3>📄 月間レポート（A4）</h3><label>対象月</label><input id="reportMonth" type="month"><p class="muted">記録と完了チェックから月別に集計。印刷画面からPDF保存もできるで！</p><button class="primary" id="printMonthly">月間レポートを印刷 / PDF保存</button></div><div class="panel"><h3>💾 データのバックアップ</h3><div class="buttons"><button class="primary" id="exportBtn">JSONを書き出す</button><label class="soft" style="cursor:pointer;margin:0">JSONを読み込む<input id="restoreFile" type="file" accept="application/json,.json" style="display:none"></label></div><p class="muted">記録はこの端末のブラウザに保存。機種変更前にはバックアップ推奨。</p></div></section>
 </main><footer>TRAINING LOG 🥊</footer><script>
@@ -23,7 +23,7 @@ let timerId=null,remaining=120,phase='round',running=false,currentRound=1;
 let audioCtx=null,lastTickAt=0;
 function unlockAudio(){try{audioCtx ||= new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();}catch(e){console.warn('Audio unavailable',e)}}
 function tone(freq,start,duration,volume=0.3){if(!audioCtx)return;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='triangle';o.frequency.setValueAtTime(freq,start);g.gain.setValueAtTime(0.0001,start);g.gain.exponentialRampToValueAtTime(volume,start+0.012);g.gain.exponentialRampToValueAtTime(0.0001,start+duration);o.connect(g);g.connect(audioCtx.destination);o.start(start);o.stop(start+duration+0.02)}
-function gong(){
+function synthesizedGong(){
  if(!audioCtx)return;
  const ctx=audioCtx, start=ctx.currentTime+0.035;
  // Boxing ring bell: hard metal attack, inharmonic bronze-like modes and long shimmering decay.
@@ -48,6 +48,19 @@ function gong(){
   }
  }
 }
+// Actual three-strike boxing bell recording (CC0, Wikimedia Commons).
+// Source: https://commons.wikimedia.org/wiki/File:Dingdingding.wav
+const boxingBell = new Audio('https://commons.wikimedia.org/wiki/Special:Redirect/file/Dingdingding.wav');
+boxingBell.preload='auto';
+let realGongReady=false;
+boxingBell.addEventListener('canplaythrough',()=>{realGongReady=true});
+boxingBell.addEventListener('error',()=>{realGongReady=false});
+function gong(){
+ if(realGongReady || boxingBell.readyState>=2){
+  try{boxingBell.pause();boxingBell.currentTime=0;const play=boxingBell.play();if(play&&play.catch)play.catch(()=>synthesizedGong());return}catch(e){}
+ }
+ synthesizedGong();
+}
 function clappers(){if(!audioCtx)return;let t=audioCtx.currentTime+0.01;for(let i=0;i<3;i++){tone(1250,t+i*0.34,0.085,0.25);tone(1850,t+i*0.34,0.06,0.12)}}
 function maxRounds(){return Math.max(1,Math.min(99,+$('roundCount').value||1))}
 function showClock(){$('clock').textContent=pad(Math.floor(remaining/60))+':'+pad(remaining%60);$('timerPhase').textContent=phase==='done'?'全ラウンド終了！':phase==='round'?'ラウンド':'休憩';$('roundProgress').textContent=currentRound+' / '+maxRounds()+' R'}
@@ -57,7 +70,7 @@ $('startTimer').onclick=()=>{unlockAudio();if(running)return;if(phase==='done')$
 $('pauseTimer').onclick=stopTimer;
 $('resetTimer').onclick=()=>{stopTimer();phase='round';currentRound=1;remaining=Math.max(1,+$('roundSeconds').value||120);showClock()};
 $('roundSeconds').onchange=()=>{if(!running)$('resetTimer').click()};$('roundCount').onchange=()=>{if(!running)$('resetTimer').click()};
-$('testSound').onclick=()=>{unlockAudio();gong();setTimeout(clappers,1250)};
+$('testSound').onclick=()=>{unlockAudio();gong();setTimeout(clappers,2200)};
 $('reportMonth').value=dateStr(new Date()).slice(0,7);
 $('printMonthly').onclick=()=>{
  const month=$('reportMonth').value;if(!month){alert('対象月を選んでな！');return}
