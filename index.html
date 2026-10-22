@@ -147,14 +147,82 @@ function fitPrintPreview(){
 window.addEventListener('load',fitPrintPreview);
 window.addEventListener('resize',fitPrintPreview);
 setTimeout(fitPrintPreview,150);
-function makeWeeklyPdf(){
- const help=document.getElementById('printHelp');
- help.hidden=false;
- help.textContent='印刷画面が開かない場合は、このページをSafariで開いて共有 → プリントを選んでな。';
- // Print the existing document synchronously in response to the tap.
- // Do not use window.open or asynchronous SVG rendering (unreliable on iOS).
- try { window.print(); }
- catch(e) { help.textContent='印刷画面を開けませんでした。Safariから共有 → プリントを選んでな。'; }
+async function makeWeeklyPdf(){
+ const btn=document.getElementById('savePdf'),help=document.getElementById('printHelp');
+ btn.disabled=true;btn.textContent='PDF作成中…';help.hidden=true;
+ let host;
+ try{
+  const sheet=document.querySelector('.sheet');
+  host=document.createElement('div');host.style.cssText='position:absolute;left:-10000px;top:0;width:718px;height:979px;overflow:hidden;background:white;';
+  const clone=sheet.cloneNode(true);clone.style.cssText='width:718px;height:979px;transform:none;margin:0;';
+  host.appendChild(clone);document.body.appendChild(host);
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  const ratio=2,canvas=document.createElement('canvas');canvas.width=1436;canvas.height=1958;
+  const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.scale(ratio,ratio);
+  const base=clone.getBoundingClientRect();
+  const pos=r=>({x:r.left-base.left,y:r.top-base.top,w:r.width,h:r.height});
+  const elements=[clone,...clone.querySelectorAll('*')];
+  for(const el of elements){
+   const st=getComputedStyle(el),p=pos(el.getBoundingClientRect());
+   if(p.w<=0||p.h<=0||p.x>718||p.y>979)continue;
+   if(st.backgroundColor!=='rgba(0, 0, 0, 0)'&&st.backgroundColor!=='transparent'){
+    ctx.fillStyle=st.backgroundColor;ctx.fillRect(p.x,p.y,p.w,p.h);
+   }
+   for(const [side,coords] of [['Top',[p.x,p.y,p.x+p.w,p.y]],['Bottom',[p.x,p.y+p.h,p.x+p.w,p.y+p.h]],['Left',[p.x,p.y,p.x,p.y+p.h]],['Right',[p.x+p.w,p.y,p.x+p.w,p.y+p.h]]]){
+    const width=parseFloat(st['border'+side+'Width']);
+    if(width>0&&st['border'+side+'Style']!=='none'){
+     ctx.strokeStyle=st['border'+side+'Color'];ctx.lineWidth=width;
+     ctx.beginPath();ctx.moveTo(coords[0],coords[1]);ctx.lineTo(coords[2],coords[3]);ctx.stroke();
+    }
+   }
+  }
+  // Paint text at actual DOM line positions, including wrapped Japanese text.
+  const walker=document.createTreeWalker(clone,NodeFilter.SHOW_TEXT);
+  let node;
+  while(node=walker.nextNode()){
+   if(!node.textContent.trim())continue;
+   const parent=node.parentElement,st=getComputedStyle(parent);
+   if(st.display==='none'||st.visibility==='hidden')continue;
+   const fontSize=parseFloat(st.fontSize)||12;
+   ctx.font=st.font;ctx.fillStyle=st.color;ctx.textBaseline='alphabetic';
+   const range=document.createRange();
+   for(let i=0;i<node.length;i++){
+    const char=node.textContent[i];if(/\\s/.test(char))continue;
+    range.setStart(node,i);range.setEnd(node,i+1);
+    const rect=range.getBoundingClientRect();const p=pos(rect);
+    if(p.x>=0&&p.y>=0&&p.x<718&&p.y<979&&p.w>0){
+     ctx.fillText(char,p.x,p.y+p.h-(p.h-fontSize)*0.5-1);
+    }
+   }
+  }
+  const imageData=canvas.toDataURL('image/jpeg',.93).split(',')[1];
+  const raw=atob(imageData),jpg=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)jpg[i]=raw.charCodeAt(i);
+  const enc=new TextEncoder(),parts=[],offsets=[0];let length=0;
+  const add=x=>{const data=typeof x==='string'?enc.encode(x):x;parts.push(data);length+=data.length};
+  const obj=(id,body)=>{offsets[id]=length;add(id+' 0 obj\\n'+body+'\\nendobj\\n')};
+  add('%PDF-1.4\\n');
+  obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+  offsets[4]=length;add('4 0 obj\\n<< /Type /XObject /Subtype /Image /Width 1436 /Height 1958 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpg.length+' >>\\nstream\\n');add(jpg);add('\\nendstream\\nendobj\\n');
+  const command='q\\n538.58 0 0 734.17 28.35 53.86 cm\\n/Im0 Do\\nQ\\n';
+  obj(5,'<< /Length '+enc.encode(command).length+' >>\\nstream\\n'+command+'endstream');
+  const xref=length;add('xref\\n0 6\\n0000000000 65535 f \\n');
+  for(let i=1;i<=5;i++)add(String(offsets[i]).padStart(10,'0')+' 00000 n \\n');
+  add('trailer\\n<< /Size 6 /Root 1 0 R >>\\nstartxref\\n'+xref+'\\n%%EOF');
+  const pdf=new Blob(parts,{type:'application/pdf'});
+  const file=new File([pdf],'週間トレーニング.pdf',{type:'application/pdf'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+   try{await navigator.share({files:[file],title:'週間トレーニング'});return}
+   catch(e){if(e.name==='AbortError')return}
+  }
+  const url=URL.createObjectURL(pdf),link=document.createElement('a');
+  link.href=url;link.download='週間トレーニング.pdf';document.body.appendChild(link);link.click();link.remove();
+  help.hidden=false;help.textContent='PDFを保存したで。ファイルアプリで開いて「共有」→「プリント」を選んでな。';
+ }catch(e){
+  console.error(e);help.hidden=false;help.textContent='PDFの生成に失敗しました：'+e.message;
+ }finally{if(host)host.remove();btn.disabled=false;btn.textContent='🖨️ 印刷 / PDF保存'}
 }
 <\/script></body></html>`;
  const w=window.open('','_blank');if(!w){alert('ポップアップがブロックされたで');return}w.document.open();w.document.write(html);w.document.close();
