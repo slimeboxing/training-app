@@ -94,14 +94,27 @@ function showStandalonePrint(html,kind){
    if(!source)throw new Error('印刷内容が見つかりません');
    let blob;
    if(source.classList.contains('sheet')){
-     // Render the fixed A4 sheet to a single image, then place it on one PDF page.
-     // Avoid html2pdf's page-break/clone logic, which fails on some iOS standalone WebViews.
-     const canvas=await html2canvas(source,{scale:2,backgroundColor:'#ffffff',useCORS:true,scrollY:0,windowWidth:Math.max(800,source.scrollWidth),onclone:(doc)=>{
-       const el=doc.querySelector('.sheet');if(el){el.style.transform='none';el.style.margin='0';}
-     }});
-     const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-     pdf.addImage(canvas.toDataURL('image/jpeg',0.95),'JPEG',10,10,190,259);
-     blob=pdf.output('blob');
+     // Reuse the working monthly PDF conversion path for the weekly sheet.
+     const oldTransform=source.style.transform;
+     const oldOrigin=source.style.transformOrigin;
+     const frame=source.closest('.sheet-frame');
+     const oldWidth=frame?frame.style.width:'';
+     const oldHeight=frame?frame.style.height:'';
+     try{
+       source.style.transform='none';
+       source.style.transformOrigin='top left';
+       if(frame){frame.style.width='190mm';frame.style.height='259mm'}
+       const opts={margin:[10,10,10,10],filename:pdfFileName,
+         image:{type:'jpeg',quality:.95},
+         html2canvas:{scale:1.5,useCORS:true,scrollY:0},
+         jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+         pagebreak:{mode:[]}};
+       blob=await html2pdf().set(opts).from(source).outputPdf('blob');
+     }finally{
+       source.style.transform=oldTransform;
+       source.style.transformOrigin=oldOrigin;
+       if(frame){frame.style.width=oldWidth;frame.style.height=oldHeight}
+     }
    }else{
      const opts={margin:12,filename:pdfFileName,image:{type:'jpeg',quality:.95},html2canvas:{scale:2,useCORS:true,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy']}};
      blob=await html2pdf().set(opts).from(source).outputPdf('blob');
